@@ -47,7 +47,7 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
-CREATE TRIGGER update_archon_settings_updated_at
+CREATE OR REPLACE TRIGGER update_archon_settings_updated_at
     BEFORE UPDATE ON archon_settings
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
@@ -55,9 +55,12 @@ CREATE TRIGGER update_archon_settings_updated_at
 -- Create RLS (Row Level Security) policies for settings
 ALTER TABLE archon_settings ENABLE ROW LEVEL SECURITY;
 
+-- Drop and recreate policies to avoid conflicts
+DROP POLICY IF EXISTS "Allow service role full access" ON archon_settings;
 CREATE POLICY "Allow service role full access" ON archon_settings
     FOR ALL USING (auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Allow authenticated users to read and update" ON archon_settings;
 CREATE POLICY "Allow authenticated users to read and update" ON archon_settings
     FOR ALL TO authenticated
     USING (true);
@@ -71,7 +74,8 @@ INSERT INTO archon_settings (key, value, is_encrypted, category, description) VA
 ('MCP_TRANSPORT', 'dual', false, 'server_config', 'MCP server transport mode - sse (web clients), stdio (IDE clients), or dual (both)'),
 ('HOST', 'localhost', false, 'server_config', 'Host to bind to if using sse as the transport (leave empty if using stdio)'),
 ('PORT', '8051', false, 'server_config', 'Port to listen on if using sse as the transport (leave empty if using stdio)'),
-('MODEL_CHOICE', 'gpt-4.1-nano', false, 'rag_strategy', 'The LLM you want to use for summaries and contextual embeddings. Generally this is a very cheap and fast LLM like gpt-4.1-nano');
+('MODEL_CHOICE', 'gpt-4.1-nano', false, 'rag_strategy', 'The LLM you want to use for summaries and contextual embeddings. Generally this is a very cheap and fast LLM like gpt-4.1-nano')
+ON CONFLICT (key) DO NOTHING;
 
 -- RAG Strategy Configuration (all default to true)
 INSERT INTO archon_settings (key, value, is_encrypted, category, description) VALUES
@@ -79,27 +83,31 @@ INSERT INTO archon_settings (key, value, is_encrypted, category, description) VA
 ('CONTEXTUAL_EMBEDDINGS_MAX_WORKERS', '3', false, 'rag_strategy', 'Maximum parallel workers for contextual embedding generation (1-10)'),
 ('USE_HYBRID_SEARCH', 'true', false, 'rag_strategy', 'Combines vector similarity search with keyword search for better results'),
 ('USE_AGENTIC_RAG', 'true', false, 'rag_strategy', 'Enables code example extraction, storage, and specialized code search functionality'),
-('USE_RERANKING', 'true', false, 'rag_strategy', 'Applies cross-encoder reranking to improve search result relevance');
+('USE_RERANKING', 'true', false, 'rag_strategy', 'Applies cross-encoder reranking to improve search result relevance')
+ON CONFLICT (key) DO NOTHING;
 
 -- Monitoring Configuration
 INSERT INTO archon_settings (key, value, is_encrypted, category, description) VALUES
 ('LOGFIRE_ENABLED', 'true', false, 'monitoring', 'Enable or disable Pydantic Logfire logging and observability platform'),
-('PROJECTS_ENABLED', 'true', false, 'features', 'Enable or disable Projects and Tasks functionality');
+('PROJECTS_ENABLED', 'true', false, 'features', 'Enable or disable Projects and Tasks functionality')
+ON CONFLICT (key) DO NOTHING;
 
 -- Placeholder for sensitive credentials (to be added via Settings UI)
 INSERT INTO archon_settings (key, encrypted_value, is_encrypted, category, description) VALUES
-('OPENAI_API_KEY', NULL, true, 'api_keys', 'OpenAI API Key for embedding model (text-embedding-3-small). Get from: https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key');
+('OPENAI_API_KEY', NULL, true, 'api_keys', 'OpenAI API Key for embedding model (text-embedding-3-small). Get from: https://help.openai.com/en/articles/4936850-where-do-i-find-my-openai-api-key')
+ON CONFLICT (key) DO NOTHING;
 
 -- LLM Provider configuration settings
 INSERT INTO archon_settings (key, value, is_encrypted, category, description) VALUES
-('LLM_PROVIDER', 'openai', false, 'rag_strategy', 'LLM provider to use: openai, ollama, or google'),
+('LLM_PROVIDER', 'openai', false, 'rag_strategy', 'LLM provider to use: openai, ollama, google, or litellm'),
 ('LLM_BASE_URL', NULL, false, 'rag_strategy', 'Custom base URL for LLM provider (mainly for Ollama, e.g., http://localhost:11434/v1)'),
 ('EMBEDDING_MODEL', 'text-embedding-3-small', false, 'rag_strategy', 'Embedding model for vector search and similarity matching (required for all embedding operations)')
 ON CONFLICT (key) DO NOTHING;
 
 -- Add provider API key placeholders
 INSERT INTO archon_settings (key, encrypted_value, is_encrypted, category, description) VALUES
-('GOOGLE_API_KEY', NULL, true, 'api_keys', 'Google API Key for Gemini models. Get from: https://aistudio.google.com/apikey')
+('GOOGLE_API_KEY', NULL, true, 'api_keys', 'Google API Key for Gemini models. Get from: https://aistudio.google.com/apikey'),
+('LITELLM_API_KEY', NULL, true, 'api_keys', 'LiteLLM API Key for unified access to multiple LLM providers')
 ON CONFLICT (key) DO NOTHING;
 
 -- Code Extraction Settings Migration
@@ -206,9 +214,9 @@ CREATE TABLE IF NOT EXISTS archon_crawled_pages (
 );
 
 -- Create indexes for better performance
-CREATE INDEX ON archon_crawled_pages USING ivfflat (embedding vector_cosine_ops);
-CREATE INDEX idx_archon_crawled_pages_metadata ON archon_crawled_pages USING GIN (metadata);
-CREATE INDEX idx_archon_crawled_pages_source_id ON archon_crawled_pages (source_id);
+CREATE INDEX IF NOT EXISTS idx_archon_crawled_pages_embedding ON archon_crawled_pages USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_archon_crawled_pages_metadata ON archon_crawled_pages USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS idx_archon_crawled_pages_source_id ON archon_crawled_pages (source_id);
 
 -- Create the code_examples table
 CREATE TABLE IF NOT EXISTS archon_code_examples (
@@ -230,9 +238,9 @@ CREATE TABLE IF NOT EXISTS archon_code_examples (
 );
 
 -- Create indexes for better performance
-CREATE INDEX ON archon_code_examples USING ivfflat (embedding vector_cosine_ops);
-CREATE INDEX idx_archon_code_examples_metadata ON archon_code_examples USING GIN (metadata);
-CREATE INDEX idx_archon_code_examples_source_id ON archon_code_examples (source_id);
+CREATE INDEX IF NOT EXISTS idx_archon_code_examples_embedding ON archon_code_examples USING ivfflat (embedding vector_cosine_ops);
+CREATE INDEX IF NOT EXISTS idx_archon_code_examples_metadata ON archon_code_examples USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS idx_archon_code_examples_source_id ON archon_code_examples (source_id);
 
 -- =====================================================
 -- SECTION 5: SEARCH FUNCTIONS
@@ -322,18 +330,21 @@ ALTER TABLE archon_sources ENABLE ROW LEVEL SECURITY;
 ALTER TABLE archon_code_examples ENABLE ROW LEVEL SECURITY;
 
 -- Create policies that allow anyone to read
+DROP POLICY IF EXISTS "Allow public read access to archon_crawled_pages" ON archon_crawled_pages;
 CREATE POLICY "Allow public read access to archon_crawled_pages"
   ON archon_crawled_pages
   FOR SELECT
   TO public
   USING (true);
 
+DROP POLICY IF EXISTS "Allow public read access to archon_sources" ON archon_sources;
 CREATE POLICY "Allow public read access to archon_sources"
   ON archon_sources
   FOR SELECT
   TO public
   USING (true);
 
+DROP POLICY IF EXISTS "Allow public read access to archon_code_examples" ON archon_code_examples;
 CREATE POLICY "Allow public read access to archon_code_examples"
   ON archon_code_examples
   FOR SELECT
@@ -536,38 +547,48 @@ ALTER TABLE archon_document_versions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE archon_prompts ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies for service role (full access)
+DROP POLICY IF EXISTS "Allow service role full access to archon_projects" ON archon_projects;
 CREATE POLICY "Allow service role full access to archon_projects" ON archon_projects
     FOR ALL USING (auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Allow service role full access to archon_tasks" ON archon_tasks;
 CREATE POLICY "Allow service role full access to archon_tasks" ON archon_tasks
     FOR ALL USING (auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Allow service role full access to archon_project_sources" ON archon_project_sources;
 CREATE POLICY "Allow service role full access to archon_project_sources" ON archon_project_sources
     FOR ALL USING (auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Allow service role full access to archon_document_versions" ON archon_document_versions;
 CREATE POLICY "Allow service role full access to archon_document_versions" ON archon_document_versions
     FOR ALL USING (auth.role() = 'service_role');
 
+DROP POLICY IF EXISTS "Allow service role full access to archon_prompts" ON archon_prompts;
 CREATE POLICY "Allow service role full access to archon_prompts" ON archon_prompts
     FOR ALL USING (auth.role() = 'service_role');
 
 -- Create RLS policies for authenticated users
+DROP POLICY IF EXISTS "Allow authenticated users to read and update archon_projects" ON archon_projects;
 CREATE POLICY "Allow authenticated users to read and update archon_projects" ON archon_projects
     FOR ALL TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read and update archon_tasks" ON archon_tasks;
 CREATE POLICY "Allow authenticated users to read and update archon_tasks" ON archon_tasks
     FOR ALL TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read and update archon_project_sources" ON archon_project_sources;
 CREATE POLICY "Allow authenticated users to read and update archon_project_sources" ON archon_project_sources
     FOR ALL TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read archon_document_versions" ON archon_document_versions;
 CREATE POLICY "Allow authenticated users to read archon_document_versions" ON archon_document_versions
     FOR SELECT TO authenticated
     USING (true);
 
+DROP POLICY IF EXISTS "Allow authenticated users to read archon_prompts" ON archon_prompts;
 CREATE POLICY "Allow authenticated users to read archon_prompts" ON archon_prompts
     FOR SELECT TO authenticated
     USING (true);
@@ -781,7 +802,8 @@ You are the Data-Builder Agent. Your purpose is to transform descriptions of dat
 
 ⸻
 
-Remember: Create production-ready data models.', 'System prompt for creating data models in the data array');
+Remember: Create production-ready data models.', 'System prompt for creating data models in the data array')
+ON CONFLICT (prompt_name) DO NOTHING;
 
 -- =====================================================
 -- SETUP COMPLETE

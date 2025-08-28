@@ -2,7 +2,7 @@
 LLM Provider Service
 
 Provides a unified interface for creating OpenAI-compatible clients for different LLM providers.
-Supports OpenAI, Ollama, and Google Gemini.
+Supports OpenAI, Ollama, Google Gemini, and LiteLLM (for unified access to 100+ LLM providers).
 """
 
 import time
@@ -10,6 +10,11 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import openai
+try:
+    import litellm
+    LITELLM_AVAILABLE = True
+except ImportError:
+    LITELLM_AVAILABLE = False
 
 from ..config.logfire_config import get_logger
 from .credential_service import credential_service
@@ -118,6 +123,41 @@ async def get_llm_client(provider: str | None = None, use_embedding_provider: bo
             )
             logger.info("Google Gemini client created successfully")
 
+        elif provider_name == "litellm":
+            if not LITELLM_AVAILABLE:
+                raise ValueError("LiteLLM is not installed. Install with: pip install litellm")
+            
+            if not api_key:
+                raise ValueError("LiteLLM API key not found")
+
+            # LiteLLM provides its own async client that's OpenAI-compatible
+            from litellm import acompletion, aembedding
+            
+            # Create a wrapper client that uses LiteLLM's functions
+            class LiteLLMAsyncClient:
+                def __init__(self, api_key: str, base_url: str = None):
+                    self.api_key = api_key
+                    self.base_url = base_url
+                    # Set the API key in LiteLLM's environment
+                    import os
+                    os.environ["LITELLM_LOG"] = "DEBUG"  # Optional: enable logging
+                
+                async def completions_create(self, **kwargs):
+                    """Wrapper for LiteLLM's acompletion function"""
+                    # Add any LiteLLM specific configuration here
+                    return await acompletion(**kwargs)
+                
+                @property
+                def completions(self):
+                    return self
+                
+                async def create(self, **kwargs):
+                    """Alias for completions_create for OpenAI compatibility"""
+                    return await self.completions_create(**kwargs)
+
+            client = LiteLLMAsyncClient(api_key=api_key, base_url=base_url)
+            logger.info("LiteLLM client created successfully")
+
         else:
             raise ValueError(f"Unsupported LLM provider: {provider_name}")
 
@@ -178,6 +218,10 @@ async def get_embedding_model(provider: str | None = None) -> str:
         elif provider_name == "google":
             # Google's embedding model
             return "text-embedding-004"
+        elif provider_name == "litellm":
+            # LiteLLM can use various embedding models depending on the provider
+            # Default to OpenAI's embedding model, but this can be overridden in settings
+            return "text-embedding-3-small"
         else:
             # Fallback to OpenAI's model
             return "text-embedding-3-small"

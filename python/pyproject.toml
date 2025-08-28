@@ -9,6 +9,7 @@ dependencies = [
     "mcp==1.7.1",
     "supabase==2.15.1",
     "openai==1.71.0",
+    "litellm>=1.69.0",
     "dotenv==0.9.9",
     "python-dotenv>=1.0.0",
     "sentence-transformers>=4.1.0",

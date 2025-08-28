@@ -68,6 +68,7 @@ export const RAGSettings = ({
                 { value: 'openai', label: 'OpenAI' },
                 { value: 'google', label: 'Google Gemini' },
                 { value: 'ollama', label: 'Ollama (Coming Soon)' },
+                { value: 'litellm', label: 'LiteLLM (100+ Providers)' },
               ]}
             />
           </div>
@@ -81,6 +82,20 @@ export const RAGSettings = ({
                   LLM_BASE_URL: e.target.value
                 })}
                 placeholder="http://localhost:11434/v1"
+                accentColor="green"
+              />
+            </div>
+          )}
+          {ragSettings.LLM_PROVIDER === 'litellm' && (
+            <div>
+              <Input
+                label="LiteLLM Base URL (Optional)"
+                value={ragSettings.LLM_BASE_URL || ''}
+                onChange={e => setRagSettings({
+                  ...ragSettings,
+                  LLM_BASE_URL: e.target.value
+                })}
+                placeholder="Leave empty for default routing"
                 accentColor="green"
               />
             </div>

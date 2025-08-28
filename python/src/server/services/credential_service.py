@@ -445,6 +445,7 @@ class CredentialService:
             "openai": "OPENAI_API_KEY",
             "google": "GOOGLE_API_KEY",
             "ollama": None,  # No API key needed
+            "litellm": "LITELLM_API_KEY",
         }
 
         key_name = key_mapping.get(provider)
@@ -458,6 +459,9 @@ class CredentialService:
             return rag_settings.get("LLM_BASE_URL", "http://localhost:11434/v1")
         elif provider == "google":
             return "https://generativelanguage.googleapis.com/v1beta/openai/"
+        elif provider == "litellm":
+            # LiteLLM handles routing internally, but allow custom base URL override
+            return rag_settings.get("LLM_BASE_URL", None)
         return None  # Use default for OpenAI
 
     async def set_active_provider(self, provider: str, service_type: str = "llm") -> bool:

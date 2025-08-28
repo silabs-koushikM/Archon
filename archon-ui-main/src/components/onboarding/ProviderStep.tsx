@@ -25,18 +25,19 @@ export const ProviderStep = ({ onSaved, onSkip }: ProviderStepProps) => {
 
     setSaving(true);
     try {
-      // Save the API key
+      // Save the API key with the correct key name based on provider
+      const credentialKey = provider === "openai" ? "OPENAI_API_KEY" : "LITELLM_API_KEY";
       await credentialsService.createCredential({
-        key: "OPENAI_API_KEY",
+        key: credentialKey,
         value: apiKey,
         is_encrypted: true,
         category: "api_keys",
       });
 
-      // Update the provider setting if needed
+      // Update the provider setting
       await credentialsService.updateCredential({
         key: "LLM_PROVIDER",
-        value: "openai",
+        value: provider,
         is_encrypted: false,
         category: "rag_strategy",
       });
@@ -96,6 +97,7 @@ export const ProviderStep = ({ onSaved, onSkip }: ProviderStepProps) => {
             { value: "openai", label: "OpenAI" },
             { value: "google", label: "Google Gemini" },
             { value: "ollama", label: "Ollama (Local)" },
+            { value: "litellm", label: "LiteLLM (100+ Providers)" },
           ]}
           accentColor="green"
         />
@@ -106,19 +108,21 @@ export const ProviderStep = ({ onSaved, onSkip }: ProviderStepProps) => {
             "Google Gemini offers advanced AI capabilities. Configure in Settings after setup."}
           {provider === "ollama" &&
             "Ollama runs models locally on your machine. Configure in Settings after setup."}
+          {provider === "litellm" &&
+            "LiteLLM provides unified access to 100+ LLM providers (OpenAI, Anthropic, Google, etc.). Enter any supported provider's API key."}
         </p>
       </div>
 
-      {/* OpenAI API Key Input */}
-      {provider === "openai" && (
+      {/* API Key Input for providers that need it */}
+      {(provider === "openai" || provider === "litellm") && (
         <>
           <div>
             <Input
-              label="OpenAI API Key"
+              label={provider === "openai" ? "OpenAI API Key" : "API Key"}
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="sk-..."
+              placeholder={provider === "openai" ? "sk-..." : "Enter your provider's API key"}
               accentColor="green"
               icon={<Key className="w-4 h-4" />}
             />
@@ -129,12 +133,12 @@ export const ProviderStep = ({ onSaved, onSkip }: ProviderStepProps) => {
 
           <div className="flex items-center gap-2 text-sm">
             <a
-              href="https://platform.openai.com/api-keys"
+              href={provider === "openai" ? "https://platform.openai.com/api-keys" : "https://docs.litellm.ai/docs/providers"}
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
             >
-              Get an API key from OpenAI
+              {provider === "openai" ? "Get an API key from OpenAI" : "View supported providers"}
               <ExternalLink className="w-3 h-3" />
             </a>
           </div>
